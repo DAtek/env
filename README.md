@@ -1,3 +1,6 @@
+[![codecov](https://codecov.io/gh/DAtek/env/graph/badge.svg?token=MAjETYy681)](https://codecov.io/gh/DAtek/env) [![Go Report Card](https://goreportcard.com/badge/github.com/DAtek/env)](https://goreportcard.com/report/github.com/DAtek/env)
+
+
 # env
 Lightweight library, which parses environmental variables into structs.
 
