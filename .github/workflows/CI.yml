@@ -3,6 +3,7 @@ name: CI Pipeline
 on:
   push:
 
+
 jobs:
   CI:
     runs-on: ubuntu-latest
@@ -14,7 +15,9 @@ jobs:
     - uses: extractions/setup-just@v1
 
     - name: Test
-      run: just test
+      run: |
+        just test
+        just test-examples
 
     - name: Upload coverage
       uses: codecov/codecov-action@v3

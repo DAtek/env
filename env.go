@@ -8,29 +8,39 @@ import (
 	"github.com/iancoleman/strcase"
 )
 
-/*
-Returns a new loader which can be used to parse environmental variables into a struct.
+type Config struct {
+	Parsers       ParserMap
+	PointerSetter PointerSetter
+}
 
-Example:
-*/
-func NewLoader[T any](parsers ...ParserMap) func(default_ ...any) (T, error) {
+type PointerSetter func(field *reflect.Value, value any) error
+
+// Returns a new loader which can be used to parse environmental variables into a struct.
+func NewLoader[T any](config ...Config) func(default_ ...any) (T, error) {
 	allParsers := []ParserMap{}
+	var pointerSetter PointerSetter = nil
 
-	switch len(parsers) {
+	switch len(config) {
 	case 0:
 		allParsers = append(allParsers, baseParsers)
 	default:
-		allParsers = append(allParsers, parsers...)
+		allParsers = append(allParsers, config[0].Parsers)
 		allParsers = append(allParsers, baseParsers)
+		pointerSetter = config[0].PointerSetter
 	}
 
 	return func(default_ ...any) (T, error) {
-		return load[T](allParsers, default_...)
+		return load[T](allParsers, pointerSetter, default_...)
 	}
 }
 
-func load[T any](parserMaps []ParserMap, default_ ...any) (T, error) {
+func load[T any](parserMaps []ParserMap, extraPointerSetter PointerSetter, default_ ...any) (T, error) {
 	var obj T
+
+	pointerSetters := []PointerSetter{setPointerValue}
+	if extraPointerSetter != nil {
+		pointerSetters = append(pointerSetters, extraPointerSetter)
+	}
 
 	errorCollection := ErrorCollection{
 		Errors: []FieldError{},
@@ -41,14 +51,14 @@ func load[T any](parserMaps []ParserMap, default_ ...any) (T, error) {
 		upperSnakeCaseField := strcase.ToScreamingSnake(field.Name)
 		value, envVarSet := os.LookupEnv(upperSnakeCaseField)
 		targetField := reflection.FieldByName(field.Name)
-		targetType := field.Type.Name()
+		targetType := getFieldTypeName(&field)
 
 		if envVarSet {
 			parse, err := getParserForType(parserMaps, targetType)
 			if err != nil {
 				errorCollection.Errors = append(errorCollection.Errors, FieldError{
 					Location:      upperSnakeCaseField,
-					ErrorType:     ERROR_UNSUPPORTED_TYPE,
+					ErrorType:     ErrorParserMissingType,
 					VariableType:  targetType,
 					OriginalError: err,
 				})
@@ -60,14 +70,29 @@ func load[T any](parserMaps []ParserMap, default_ ...any) (T, error) {
 			if err != nil {
 				errorCollection.Errors = append(errorCollection.Errors, FieldError{
 					Location:      upperSnakeCaseField,
-					ErrorType:     ERROR_WORNG_TYPE,
+					ErrorType:     ErrorWrongType,
 					VariableType:  targetType,
 					OriginalError: err,
 				})
 				continue
 			}
 
-			targetField.Set(reflect.ValueOf(convertedVal))
+			for _, setPointerValue := range pointerSetters {
+				err = setPointerValue(&targetField, convertedVal)
+				if err == nil {
+					break
+				}
+			}
+
+			if err != nil {
+				errorCollection.Errors = append(errorCollection.Errors, FieldError{
+					Location:      upperSnakeCaseField,
+					ErrorType:     ErrorPointerSetterMissing,
+					VariableType:  targetType,
+					OriginalError: err,
+				})
+			}
+
 			continue
 		}
 
@@ -79,7 +104,7 @@ func load[T any](parserMaps []ParserMap, default_ ...any) (T, error) {
 			if !defaultField.IsValid() {
 				errorCollection.Errors = append(errorCollection.Errors, FieldError{
 					Location:     upperSnakeCaseField,
-					ErrorType:    ERROR_REQUIRED,
+					ErrorType:    ErrorRequired,
 					VariableType: targetType,
 				})
 				continue
@@ -95,7 +120,7 @@ func load[T any](parserMaps []ParserMap, default_ ...any) (T, error) {
 
 		errorCollection.Errors = append(errorCollection.Errors, FieldError{
 			Location:     upperSnakeCaseField,
-			ErrorType:    ERROR_REQUIRED,
+			ErrorType:    ErrorRequired,
 			VariableType: targetType,
 		})
 	}
@@ -117,3 +142,55 @@ func getParserForType(parserMaps []ParserMap, type_ string) (Parser, error) {
 
 	return nil, errors.New("PARSER_NOT_FOUND")
 }
+
+func getFieldTypeName(field *reflect.StructField) string {
+	if field.Type.Kind() == reflect.Pointer {
+		return field.Type.Elem().Name()
+	}
+
+	return field.Type.Name()
+}
+
+func setPointerValue(field *reflect.Value, value any) error {
+	if field.Kind() != reflect.Pointer {
+		field.Set(reflect.ValueOf(value))
+		return nil
+	}
+
+	switch value := value.(type) {
+	case int:
+		field.Set(reflect.ValueOf(&value))
+	case int8:
+		field.Set(reflect.ValueOf(&value))
+	case int16:
+		field.Set(reflect.ValueOf(&value))
+	case int32:
+		field.Set(reflect.ValueOf(&value))
+	case int64:
+		field.Set(reflect.ValueOf(&value))
+	case uint:
+		field.Set(reflect.ValueOf(&value))
+	case uint8:
+		field.Set(reflect.ValueOf(&value))
+	case uint16:
+		field.Set(reflect.ValueOf(&value))
+	case uint32:
+		field.Set(reflect.ValueOf(&value))
+	case uint64:
+		field.Set(reflect.ValueOf(&value))
+	case float32:
+		field.Set(reflect.ValueOf(&value))
+	case float64:
+		field.Set(reflect.ValueOf(&value))
+	case string:
+		field.Set(reflect.ValueOf(&value))
+	case bool:
+		field.Set(reflect.ValueOf(&value))
+	default:
+		return ErrorPointerSetterMissing
+	}
+
+	return nil
+}
+
+var _ PointerSetter = setPointerValue

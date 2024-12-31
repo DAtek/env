@@ -7,10 +7,15 @@ import (
 
 type ErrorType string
 
+func (e ErrorType) Error() string {
+	return string(e)
+}
+
 const (
-	ERROR_REQUIRED         = ErrorType("required")
-	ERROR_WORNG_TYPE       = ErrorType("wrong_type")
-	ERROR_UNSUPPORTED_TYPE = ErrorType("unsupported_type")
+	ErrorRequired             ErrorType = "required"
+	ErrorWrongType            ErrorType = "wrong_type"
+	ErrorParserMissingType    ErrorType = "parser_missing"
+	ErrorPointerSetterMissing ErrorType = "pointer_setter_missing"
 )
 
 type ErrorCollection struct {
@@ -38,11 +43,14 @@ func (fieldError *FieldError) Error() string {
 }
 
 var errorMsgGenerators = map[ErrorType]func(*FieldError) string{
-	ERROR_REQUIRED: func(fe *FieldError) string { return fmt.Sprintf("Environmental variable '%s' is unset", fe.Location) },
-	ERROR_WORNG_TYPE: func(fe *FieldError) string {
+	ErrorRequired: func(fe *FieldError) string { return fmt.Sprintf("Environmental variable '%s' is unset", fe.Location) },
+	ErrorWrongType: func(fe *FieldError) string {
 		return fmt.Sprintf("Environmental variable '%s' has wrong type. Required type: '%s'", fe.Location, fe.VariableType)
 	},
-	ERROR_UNSUPPORTED_TYPE: func(fe *FieldError) string {
+	ErrorParserMissingType: func(fe *FieldError) string {
 		return fmt.Sprintf("Parser missing for environmental variable '%s'. Required type: '%s'", fe.Location, fe.VariableType)
+	},
+	ErrorPointerSetterMissing: func(fe *FieldError) string {
+		return fmt.Sprintf("Pointer setter missing for environmental variable '%s'. Required type: '%s'", fe.Location, fe.VariableType)
 	},
 }

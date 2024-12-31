@@ -32,7 +32,7 @@ func main() {
 	os.Clearenv()
 	os.Setenv("APP_CENTER", "12;5")
 
-	loadEnv := env.NewLoader[Config](customParsers)
+	loadEnv := env.NewLoader[Config](env.Config{Parsers: customParsers})
 	config, _ := loadEnv()
 
 	fmt.Printf("config.AppCenter: %v\n", config.AppCenter)
